@@ -1,4 +1,9 @@
 photosort_venv/
+input/*
+sorted_photos/*
+.vscode
+.idea
+.isort.cfg
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

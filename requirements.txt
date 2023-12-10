@@ -1,0 +1,4 @@
+ExifRead==3.0.0
+
+Pillow~=10.1.0
+pyheif~=0.7.1

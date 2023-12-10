@@ -1,70 +1,72 @@
+import logging
 import os
 import shutil
 from datetime import datetime
+from pathlib import Path
+from typing import List, Dict
 
-import exifread
-from PIL import Image
-from PIL.ExifTags import TAGS
-from pillow_heif import register_heif_opener
+from utils.utils import get_image_exif_tag
 
-register_heif_opener()
 DATETIME_EXIF_TAG_ID = 306
 
-class SortPhotos():
 
-    def __init__(self, directory: str) -> None:
-        self.images_directory = directory
+class SortPhotos:
 
-    def get_image_metadata(self, image_path: str) -> dict:
-        tags = {}
-        if image_path.lower().endswith(('.jpg', '.jpeg')):
-            with open(image_path, 'rb') as f:
-                tags = exifread.process_file(f)
-        return tags
+    def __init__(self, filename_base: str, input_dir: str = "./input/", output_dir: str = "./sorted_photos/") -> None:
+        self.logger = logging.getLogger()
+        self.input_dir = input_dir
+        self.filename_base = filename_base
+        self.output_dir = output_dir
 
-        ## Optional code for pretty-printing the dictionary
-        # for tag in tags.keys():
-        #     if tag not in ('JPEGThumbnail', 'TIFFThumbnail', 'Filename', 'EXIF MakerNote'):
-        #         print(f"{tag:25}: {tags[tag]}")
+    def sort_images_by_datetime(self):
+        self.create_output_directory()
 
-    def get_image_datetime(self, image_path: str) -> str:
-        image = Image.open(image_path)
-        exifdata = image.getexif()
-        datetime = exifdata.get(DATETIME_EXIF_TAG_ID)
-        if datetime is None:
-            raise Exception(f"Error while reading image metadata, exif metadata ID {DATETIME_EXIF_TAG_ID} is {datetime}.")
-        return datetime
-    
-    def sort_images_by_datetime(self, output_dir="./sorted_photos/"):
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+        photo_filenames = [f for f in os.listdir(self.input_dir)]
+        date_time_mapping = self.map_filenames_to_datetimes(photo_filenames)
 
-        photo_files = [f for f in os.listdir(self.images_directory)]
+        self.logger.info("Sorting photos...")
+        sorted_photos = sorted(photo_filenames, key=lambda x: date_time_mapping[x])
+        self.logger.info("Photos sorted.")
 
+        self.logger.info("Saving photos to new location...")
+        self.rename_and_save(sorted_photos)
+        self.logger.info(f"Photos saved in {self.output_dir}.")
+
+    def create_output_directory(self):
+        """
+        Creates output directory if it does not exist.
+        """
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir)
+
+    def map_filenames_to_datetimes(self, photo_files: List[str]) -> Dict[str, datetime]:
+        """
+        Creates mapping between filenames and their datetime exif tags values.
+        Args:
+            photo_files: list of filenames
+
+        Returns:
+            dictionary with the filename-datetime mapping
+        """
         date_time_mapping = {}
         for filename in photo_files:
-            image_path = os.path.join(self.images_directory, filename)
-            try:
-                image_datetime = self.get_image_datetime(image_path)
-            except Exception as error:
-                print(error)
-
+            image_path = str(Path(self.input_dir) / filename)
+            image_datetime = get_image_exif_tag(image_path, DATETIME_EXIF_TAG_ID)
             date_format = "%Y:%m:%d %H:%M:%S"
-            try:
-                date_time = datetime.strptime(image_datetime, date_format)
-            except ValueError as error:
-                print(error)
-
+            date_time = datetime.strptime(image_datetime, date_format)
             date_time_mapping[filename] = date_time
+        return date_time_mapping
 
-        sorted_photos = sorted(photo_files, key=lambda x: date_time_mapping[x])
-        print(sorted_photos)
-
-        rename_pattern = "chata_v_prirode_{:03d}"
-
+    def rename_and_save(self, sorted_photos: List[str]) -> None:
+        """
+        Rename the photos and save them to the output directory.
+        Args:
+            sorted_photos: list of filenames
+        """
+        rename_pattern = f"{self.filename_base}" + "_{:03d}"
         for index, photo in enumerate(sorted_photos):
             _, file_extension = os.path.splitext(photo)
-            new_name = rename_pattern.format(index+1)
-            old_path = os.path.join(os.path.dirname(self.images_directory), photo)
-            new_path = os.path.join(os.path.dirname(output_dir), new_name + file_extension)
-            shutil.copy(old_path, new_path)
+            new_name = rename_pattern.format(index + 1)
+            old_path = Path(self.input_dir) / photo
+            new_path = Path(self.output_dir) / (new_name + file_extension)
+            shutil.copy2(old_path, new_path)
